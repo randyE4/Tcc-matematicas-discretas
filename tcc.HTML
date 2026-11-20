@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grafos: BFS, DFS y Camino Mínimo</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;padding:20px;background:#f4f6fb;color:#222}
+  h1{font-size:1.4em;margin:0 0 4px}
+  .sub{color:#555;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+  textarea,input,select{width:100%;box-sizing:border-box;padding:8px;font:inherit;border:1px solid #ccc;border-radius:6px}
+  textarea{height:150px;font-family:monospace}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .row input{width:80px}
+  .row select{width:auto}
+  button{padding:8px 12px;margin:4px 4px 4px 0;border:0;border-radius:6px;background:#2d5be3;color:#fff;cursor:pointer}
+  button.sec{background:#6b7280}
+  pre{background:#f0f2f7;padding:10px;border-radius:6px;white-space:pre-wrap;min-height:60px}
+  canvas{width:100%;height:360px;background:#fff;border:1px solid #ddd;border-radius:8px}
+  .ok{color:#117a37;font-weight:bold}.bad{color:#b42318;font-weight:bold}
+  table{width:100%;border-collapse:collapse;font-size:.9em;margin-top:10px}
+  td,th{border-bottom:1px solid #eee;padding:6px;text-align:left;vertical-align:top}
+</style>
+</head>
+<body>
+<h1>Tema seleccionado: Grafos</h1>
+<p class="sub">Búsqueda BFS y DFS, cálculo de camino mínimo (Dijkstra), representación y visualización.</p>
+
+<div class="grid">
+  <div class="card">
+    <label>Grafo (una arista por línea: <code>origen destino [peso]</code>, las líneas con # son comentarios)</label>
+    <textarea id="grafo">A B 4
+A C 1
+C B 2
+B D 5
+C D 8
+D E 3</textarea>
+    <div class="row"><label><input type="checkbox" id="dirigido" style="width:auto"> Grafo dirigido</label></div>
+    <div class="row">
+      <select id="op">
+        <option value="bfs">BFS (recorrido en anchura)</option>
+        <option value="dfs">DFS (recorrido en profundidad)</option>
+        <option value="dijkstra">Camino mínimo (Dijkstra)</option>
+      </select>
+      Origen <input id="origen" value="A">
+      Destino <input id="destino" value="E">
+    </div>
+    <button id="ejecutar">Ejecutar</button>
+    <pre id="resultado"></pre>
+  </div>
+  <div class="card"><canvas id="canvas"></canvas></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3>Pruebas automáticas</h3>
+  <button id="pruebas" class="sec">Ejecutar pruebas</button>
+  <table id="tabla"></table>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---------- Representación: lista de adyacencia ----------
+function parseGraph(texto, dirigido) {
+  const adj = new Map();
+  const addV = v => { if (!adj.has(v)) adj.set(v, []); };
+  texto.split('\n').forEach((linea, i) => {
+    const t = linea.trim();
+    if (!t || t.startsWith('#')) return;
+    const p = t.split(/\s+/);
+    if (p.length < 2 || p.length > 3) throw new Error(`Línea ${i + 1}: use "origen destino [peso]"`);
+    const [u, v] = p;
+    const w = p.length === 3 ? Number(p[2]) : 1;
+    if (Number.isNaN(w)) throw new Error(`Línea ${i + 1}: el peso debe ser numérico`);
+    addV(u); addV(v);
+    adj.get(u).push({ to: v, w });
+    if (!dirigido) adj.get(v).push({ to: u, w });
+  });
+  for (const lista of adj.values()) lista.sort((a, b) => a.to.localeCompare(b.to));
+  return adj;
+}
+
+// ---------- Algoritmos ----------
+function bfs(adj, s) {
+  const orden = [], vis = new Set([s]), cola = [s];
+  while (cola.length) {
+    const u = cola.shift();
+    orden.push(u);
+    for (const { to } of adj.get(u))
+      if (!vis.has(to)) { vis.add(to); cola.push(to); }
+  }
+  return orden;
+}
+
+function dfs(adj, s, vis = new Set(), orden = []) {
+  vis.add(s);
+  orden.push(s);
+  for (const { to } of adj.get(s))
+    if (!vis.has(to)) dfs(adj, to, vis, orden);
+  return orden;
+}
+
+function dijkstra(adj, s, t) {
+  for (const lista of adj.values())
+    for (const { w } of lista)
+      if (w < 0) throw new Error('Dijkstra no admite pesos negativos');
+  const dist = new Map(), prev = new Map(), hecho = new Set();
+  for (const v of adj.keys()) dist.set(v, Infinity);
+  dist.set(s, 0);
+  while (true) {
+    let u = null;
+    for (const [v, d] of dist)
+      if (!hecho.has(v) && d < Infinity && (u === null || d < dist.get(u))) u = v;
+    if (u === null) break;
+    hecho.add(u);
+    for (const { to, w } of adj.get(u)) {
+      const nd = dist.get(u) + w;
+      if (nd < dist.get(to)) { dist.set(to, nd); prev.set(to, u); }
+    }
+  }
+  const d = dist.get(t);
+  if (d === Infinity) return { dist: Infinity, path: null };
+  const path = [t];
+  while (prev.has(path[0])) path.unshift(prev.get(path[0]));
+  return { dist: d, path };
+}
+
+// ---------- Visualización ----------
+function flecha(ctx, x1, y1, x2, y2) {
+  const a = Math.atan2(y2 - y1, x2 - x1), r = 20;
+  const ex = x2 - r * Math.cos(a), ey = y2 - r * Math.sin(a);
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - 10 * Math.cos(a - 0.4), ey - 10 * Math.sin(a - 0.4));
+  ctx.lineTo(ex - 10 * Math.cos(a + 0.4), ey - 10 * Math.sin(a + 0.4));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function dibujar(adj, dirigido, nodosR, aristasR) {
+  const c = $('canvas'), ctx = c.getContext('2d');
+  const W = c.width = c.clientWidth, H = c.height = c.clientHeight;
+  const nodos = [...adj.keys()], n = nodos.length, R = Math.min(W, H) / 2 - 40;
+  const pos = new Map();
+  nodos.forEach((v, i) => {
+    const a = 2 * Math.PI * i / n - Math.PI / 2;
+    pos.set(v, { x: W / 2 + R * Math.cos(a), y: H / 2 + R * Math.sin(a) });
+  });
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = '13px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  for (const [u, lista] of adj)
+    for (const { to, w } of lista) {
+      if (!dirigido && u > to) continue; // dibujar cada arista no dirigida una sola vez
+      const p1 = pos.get(u), p2 = pos.get(to);
+      const enCamino = aristasR.has(u + '>' + to) || (!dirigido && aristasR.has(to + '>' + u));
+      ctx.strokeStyle = enCamino ? '#f59e0b' : '#94a3b8';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = enCamino ? 4 : 2;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      if (dirigido) flecha(ctx, p1.x, p1.y, p2.x, p2.y);
+      ctx.fillStyle = '#111';
+      ctx.fillText(w, (p1.x + p2.x) / 2, (p1.y + p2.y) / 2 - 10);
+    }
+
+  for (const v of nodos) {
+    const p = pos.get(v);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 18, 0, 2 * Math.PI);
+    ctx.fillStyle = nodosR.has(v) ? '#f59e0b' : '#2d5be3';
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(v, p.x, p.y);
+  }
+}
+
+// ---------- Interfaz ----------
+function ejecutar() {
+  try {
+    const dirigido = $('dirigido').checked;
+    const adj = parseGraph($('grafo').value, dirigido);
+    const op = $('op').value, s = $('origen').value.trim(), t = $('destino').value.trim();
+    if (!adj.has(s)) throw new Error(`El origen "${s}" no existe en el grafo`);
+
+    let texto, nodosR = new Set(), aristasR = new Set();
+    if (op === 'bfs') {
+      texto = `BFS desde ${s}:\n` + bfs(adj, s).join(' → ');
+    } else if (op === 'dfs') {
+      texto = `DFS desde ${s}:\n` + dfs(adj, s).join(' → ');
+    } else {
+      if (!adj.has(t)) throw new Error(`El destino "${t}" no existe en el grafo`);
+      const r = dijkstra(adj, s, t);
+      if (r.path) {
+        texto = `Camino mínimo ${s} → ${t}\nCamino: ${r.path.join(' → ')}\nCosto: ${r.dist}`;
+        r.path.forEach(v => nodosR.add(v));
+        for (let i = 0; i < r.path.length - 1; i++) aristasR.add(r.path[i] + '>' + r.path[i + 1]);
+      } else {
+        texto = `No existe camino de ${s} a ${t}`;
+      }
+    }
+    $('resultado').textContent = texto;
+    dibujar(adj, dirigido, nodosR, aristasR);
+  } catch (e) {
+    $('resultado').textContent = 'Error: ' + e.message;
+  }
+}
+
+// ---------- Pruebas automáticas ----------
+const PRUEBAS = [
+  { nombre: 'BFS en grafo no dirigido', esperado: 'A,B,D,C',
+    fn: () => bfs(parseGraph('A B\nA D\nB C', false), 'A').join(',') },
+  { nombre: 'DFS en grafo no dirigido', esperado: 'A,B,C,D',
+    fn: () => dfs(parseGraph('A B\nA D\nB C', false), 'A').join(',') },
+  { nombre: 'Dijkstra: camino y costo mínimo', esperado: 'A,B,C|3',
+    fn: () => { const r = dijkstra(parseGraph('A B 1\nB C 2\nA C 5', false), 'A', 'C'); return r.path.join(',') + '|' + r.dist; } },
+  { nombre: 'Dijkstra: nodo inalcanzable', esperado: 'sin camino',
+    fn: () => { const r = dijkstra(parseGraph('A B 1\nC D 1', false), 'A', 'C'); return r.path ? r.path.join(',') : 'sin camino'; } },
+  { nombre: 'BFS en grafo dirigido', esperado: 'C,A,B',
+    fn: () => bfs(parseGraph('A B\nB C\nC A', true), 'C').join(',') },
+  { nombre: 'DFS en grafo dirigido', esperado: 'A,B,D,C',
+    fn: () => dfs(parseGraph('A B\nA C\nB D', true), 'A').join(',') },
+  { nombre: 'Formato inválido detectado', esperado: 'error',
+    fn: () => { try { parseGraph('A B C D', false); return 'sin error'; } catch (e) { return 'error'; } } }
+];
+
+function pruebas() {
+  const filas = PRUEBAS.map(p => {
+    let obtenido;
+    try { obtenido = p.fn(); } catch (e) { obtenido = 'Excepción: ' + e.message; }
+    const ok = obtenido === p.esperado;
+    return `<tr><td>${p.nombre}</td><td><code>${p.esperado}</code></td><td><code>${obtenido}</code></td><td class="${ok ? 'ok' : 'bad'}">${ok ? 'PASÓ' : 'FALLÓ'}</td></tr>`;
+  }).join('');
+  $('tabla').innerHTML = '<tr><th>Caso</th><th>Esperado</th><th>Obtenido</th><th>Estado</th></tr>' + filas;
+}
+
+$('ejecutar').onclick = ejecutar;
+$('pruebas').onclick = pruebas;
+ejecutar();
+pruebas();
+</script>
+</body>
+</html>
